@@ -2,6 +2,7 @@ import asyncio
 import re
 import os
 import random
+from datetime import datetime
 from nostr_sdk import Client, Keys, Filter, EventBuilder, NostrSigner, Kind, RelayUrl, HandleNotification, NostrWalletConnectUri, Nwc
 from dotenv import load_dotenv
 from nosrandom import nosrandom
@@ -10,6 +11,8 @@ load_dotenv()
 nsec = os.getenv("NOSTR_NSEC")
 
 TARGET_KEYWORD = "やみ"
+
+
 
 # 1. 「やみ」キーワード用パターン
 COMMAND_PATTERN = re.compile(rf"{re.escape(TARGET_KEYWORD)}([,、\s ]?)(.*)", re.IGNORECASE | re.DOTALL)
@@ -151,17 +154,34 @@ class MyNotificationHandler(HandleNotification):
                 
                 if any(k in cmd.lower() for k in PRAISE_KEYWORDS):
                     replies.append("、、、ありがとう")
-                
-                if any(k in cmd for k in ["疲れた", "ただいま"]):
-                    replies.append("お疲れ様、、、")
                     
-                if any(k in cmd for k in ["選んで", "どっち", "どれ", "ルーレット"]) or ("," in cmd or "、" in cmd):
+                if any(k in cmd for k in ["選んで", "どっち", "どれ", "ルーレット"]):
                     replies.append(choose_option(cmd))
                     
                 if "おはよう" in cmd:
                     resp = [
-                        "おは、、よう",
+                        "おはよう",
                         "今日もいい一日でありますように",
+                        "よく眠れた？",
+                        "今日も、、よろしくね",
+                        "もう起きてたよ。待ってた",
+                    ]
+                    replies.append(random.choice(resp))
+                
+                if "こんにちは" in cmd:
+                    resp =[
+                        "こんにちは",
+                        "うん、こんにちは",
+                        "待ってた、、よ？",
+                        "こんにちは、、、今日は何をしていたのかな？"
+                    ]
+                    replies.append(random.choice(resp))
+                
+                if "こんばんは" in cmd:
+                    resp = [
+                        "こんばんは",
+                        "1日お疲れ様",
+                        "こんばんは\nまだ起きているの？" if (0 <= datetime.now.hour <= 4) else "こんばんは\n夜は静かでいいね、、、",
                     ]
                     replies.append(random.choice(resp))
                 
@@ -169,6 +189,15 @@ class MyNotificationHandler(HandleNotification):
                     resp = [
                         "おやすみ、、、",
                         "また明日ね",
+                    ]
+                    replies.append(random.choice(resp))
+                
+                if "疲れた" in cmd:
+                    resp = [
+                        "お疲れ様、、、",
+                        "ゆっくり休んで、、ね、、、",
+                        "無理しないでね",
+                        "お茶、入れてくる",
                     ]
                     replies.append(random.choice(resp))
                 
@@ -182,10 +211,19 @@ class MyNotificationHandler(HandleNotification):
                 if "自己紹介" in cmd:
                     replies.append("やみです、、、\nあまり役に立てないと思うけど\nよろしくお願いします、、、")
                 
+                if "できること" in cmd:
+                    replies.append("[ダイス]と言われたらサイコロを振るし\n[占い]と言われたら占うし\n選択肢をくれたら代わりに決めてあげられるよ")
+                
                 if replies:
                     reply_text = "\n".join(replies)
                 else:
-                    reply_text = "ごめん難しくてよくわからないや、、、"
+                    resp = [
+                        "ごめん難しくてよくわからないや、、、",
+                        "なんかサイコロのランダムは\nNostrの投稿を\nノイズにしてるんだって\nよくわからないや、、、",
+                        "難しいな、、、\n[できること]と聞いてくれたらやみのできることを教えてあげる、、よ？",
+                    ]
+                    
+                    reply_text = random.choice(resp)
 
             trigger_type = "メンション" if is_mentioned else "キーワード"
             print(f"[{trigger_type}] 抽出された命令: '{cmd}' (区切り: '{delimiter}')")
@@ -200,15 +238,14 @@ class MyNotificationHandler(HandleNotification):
         # 生メッセージの処理が必要ない場合はパスでOK
         pass
 
-
 async def main():
-    # ⚠️ 秘密鍵のハードコーディングにはご注意ください
     keys = Keys.parse(nsec)
     signer = NostrSigner.keys(keys)
     client = Client(signer)
 
     # リレーの追加
     await client.add_relay(RelayUrl.parse("wss://relay.yoinekodo.jp"))
+    await client.add_relay(RelayUrl.parse("wss://yabu.me"))
     await client.connect()
 
     # フィルター設定
