@@ -1,0 +1,12 @@
+[project]
+name = "yami"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncio>=4.0.0",
+    "dotenv>=0.9.9",
+    "nostr-sdk>=0.44.2",
+    "websocket-client>=1.9.0",
+]

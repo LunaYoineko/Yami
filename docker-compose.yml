@@ -1,0 +1,9 @@
+services:
+    yami:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        volumes:
+            - .:/app
+            - /app/.venv
+        restart: always
