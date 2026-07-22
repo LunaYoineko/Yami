@@ -17,7 +17,7 @@ COMMAND_PATTERN = re.compile(rf"{re.escape(TARGET_KEYWORD)}([,、\s ]?)(.*)", re
 # 2. メンション用パターン（先頭にある nostr:npub1... や @メンション名 + 区切り文字 + 本文）
 MENTION_PATTERN = re.compile(r"^(?:nostr:npub1[a-z0-9]+|@\w+|@[^\s,、]+)([,、\s ]?)(.*)", re.IGNORECASE | re.DOTALL)
 
-NWC_URI_STR = ""
+NWC_URI_STR = os.getenv("NOSTR_NWC_URI")
 PRAISE_KEYWORDS = ["かわいい", "天才", "すごい", "神", "優秀", "えらい", "好き", "最高"]
 
 def check_praise_and_zap_trigger(cmd_text: str, probability: float = 0.01) -> bool:
