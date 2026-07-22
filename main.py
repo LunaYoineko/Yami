@@ -23,6 +23,8 @@ MENTION_PATTERN = re.compile(r"^(?:nostr:npub1[a-z0-9]+|@\w+|@[^\s,、]+)([,、\
 NWC_URI_STR = os.getenv("NOSTR_NWC_URI")
 PRAISE_KEYWORDS = ["かわいい", "天才", "すごい", "神", "優秀", "えらい", "好き", "最高"]
 
+poll = True
+
 def check_praise_and_zap_trigger(cmd_text: str, probability: float = 0.01) -> bool:
     is_praised = any(keyword in cmd_text.lower() for keyword in PRAISE_KEYWORDS)
     return is_praised and (random.random() < probability)
@@ -127,6 +129,19 @@ class MyNotificationHandler(HandleNotification):
             selected = random.choice(items)
             return f"う～ん、、、『{selected}』かな？、、、"
 
+        def get_nosrandom(text: str) -> str:
+            clean_text = re.sub(r"(ランダム|乱数)", "", text, flags=re.IGNORECASE).strip()
+            items = [item.strip() for item in re.split(r"[,、\s]+", clean_text) if item.strip()]
+            
+            if len(items) < 2:
+                return "最小値と最大値を決めてね、、、"
+            elif len(items) > 2:
+                return "最小値と最大値以外はいらないよ、、、"
+            
+            a = int(items[0])
+            b = int(items[1])
+            return f"{nosrandom(a, b)} かな？、、、"
+
         # -------------------------------------------------------------
         # マッチした場合の判定・返信処理
         # -------------------------------------------------------------
@@ -149,6 +164,12 @@ class MyNotificationHandler(HandleNotification):
                 if any(k in cmd for k in ["サイコロ", "ダイス", "dice"]):
                     replies.append(roll_dice())
                     
+                if "確サイ" in cmd:
+                    replies.append(f"サイコロを振ったよ、、、{nosrandom(1,6)}だったよ")
+                
+                if any(k in cmd for k in ["ランダム", "乱数"]):
+                    replies.append(get_nosrandom(cmd))
+                
                 if any(k in cmd for k in ["占い", "おみくじ", "運勢"]):
                     replies.append(tell_fortune())
                 
@@ -159,6 +180,7 @@ class MyNotificationHandler(HandleNotification):
                     replies.append(choose_option(cmd))
                     
                 if "おはよう" in cmd:
+                    poll = True
                     resp = [
                         "おはよう",
                         "今日もいい一日でありますように",
@@ -186,6 +208,7 @@ class MyNotificationHandler(HandleNotification):
                     replies.append(random.choice(resp))
                 
                 if "おやすみ" in cmd:
+                    poll = False
                     resp = [
                         "おやすみ、、、",
                         "また明日ね",
@@ -228,8 +251,9 @@ class MyNotificationHandler(HandleNotification):
             trigger_type = "メンション" if is_mentioned else "キーワード"
             print(f"[{trigger_type}] 抽出された命令: '{cmd}' (区切り: '{delimiter}')")
 
-            builder = EventBuilder.text_note_reply(reply_text, event)
-            await self.client.send_event_builder(builder)
+            if poll:
+                builder = EventBuilder.text_note_reply(reply_text, event)
+                await self.client.send_event_builder(builder)
             
             if should_zap:
                 asyncio.create_task(send_zap_via_nwc(event, sats=21))
