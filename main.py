@@ -175,7 +175,7 @@ class MyNotificationHandler(HandleNotification):
             elif len(items) > 2:
                 return "最小値と最大値以外はいらないよ、、、"
             
-            if b == 0:
+            if int(items[1]) == 0:
                 return "最大値が0だと数字が出せないよ、、、"
             
             a = int(items[0])
