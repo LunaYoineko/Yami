@@ -3,7 +3,7 @@ import re
 import os
 import random
 from datetime import datetime
-from nostr_sdk import Client, Keys, Filter, EventBuilder, NostrSigner, Kind, RelayUrl, HandleNotification, NostrWalletConnectUri, Nwc
+from nostr_sdk import Client, Keys, PublicKey, Filter, EventBuilder, NostrSigner, Kind, RelayUrl, HandleNotification, NostrWalletConnectUri, Nwc
 from dotenv import load_dotenv
 from nosrandom import nosrandom
 
@@ -12,7 +12,7 @@ nsec = os.getenv("NOSTR_NSEC")
 
 TARGET_KEYWORD = "やみ"
 
-
+TARGET_NPUB = os.getenv("NOSTR_TARGET_NPUB")
 
 # 1. 「やみ」キーワード用パターン
 COMMAND_PATTERN = re.compile(rf"{re.escape(TARGET_KEYWORD)}([,、\s ]?)(.*)", re.IGNORECASE | re.DOTALL)
@@ -22,8 +22,6 @@ MENTION_PATTERN = re.compile(r"^(?:nostr:npub1[a-z0-9]+|@\w+|@[^\s,、]+)([,、\
 
 NWC_URI_STR = os.getenv("NOSTR_NWC_URI")
 PRAISE_KEYWORDS = ["かわいい", "天才", "すごい", "神", "優秀", "えらい", "好き", "最高"]
-
-poll = True
 
 def check_praise_and_zap_trigger(cmd_text: str, probability: float = 0.01) -> bool:
     is_praised = any(keyword in cmd_text.lower() for keyword in PRAISE_KEYWORDS)
@@ -50,12 +48,21 @@ class MyNotificationHandler(HandleNotification):
         super().__init__()
         self.client = client
         self.my_pubkey = my_pubkey
+        
+        try:
+            self.target_hex_pubkey = PublicKey.parse(TARGET_NPUB).to_hex()
+            print(f"npubが指定されました: {self.target_hex_pubkey}")
+        except Exception:
+            self.target_hex_pubkey = None
+            
+        self.is_bot_active = True
 
     async def handle(self, relay_url, subscription_id, event):
         # 自分自身の投稿は無視
         if event.author() == self.my_pubkey:
             return
 
+        author_hex = event.author().to_hex()
         text = event.content()
         my_hex_pubkey = self.my_pubkey.to_hex()
 
@@ -93,6 +100,22 @@ class MyNotificationHandler(HandleNotification):
                 prompt_text = match.group(2)
                 matched = True
 
+        # --- やみ 睡眠管理 ---
+        if not matched or prompt_text is None:
+            return
+        
+        cmd = prompt_text.strip()
+        
+        if self.target_hex_pubkey and author_hex == self.target_hex_pubkey:
+            if "おはよう" in cmd:
+                self.is_bot_active = True
+                print("やみを開始しました")
+            elif "おやすみ" in cmd:
+                pass
+            
+        if not self.is_bot_active:
+            return
+
         # --- 各種関数 ---
         def roll_dice() -> str:
             resp = [
@@ -102,6 +125,20 @@ class MyNotificationHandler(HandleNotification):
                 f"サイコロなくしちゃった、、、",
             ]
             return random.choice(resp)
+        
+        def chinchiro() -> str:
+            a = nosrandom(1, 6)
+            b = nosrandom(1, 6)
+            c = nosrandom(1, 6)
+            
+            if a == 1 and b == 1 and c == 1:
+                return f"出目は 『{a}』『{b}』『{c}』\nピンゾロだったよ！"
+            elif a == b and b == c:
+                return f"出目は『{a}』『{b}』『{c}』\nゾロ目だよ"
+            elif a == 4 and b == 5 and c == 6:
+                return f"出目は『{a}』『{b}』『{c}』\nシゴロだよ、、、"
+            else:
+                return f"出目は『{a}』『{b}』『{c}』だったよ"
         
         def tell_fortune() -> str:
             results = [
@@ -121,7 +158,7 @@ class MyNotificationHandler(HandleNotification):
 
         def choose_option(text: str) -> str:
             clean_text = re.sub(r"(選んで|どれ|どっち|ルーレット|決めて|choice)", "", text, flags=re.IGNORECASE).strip()
-            items = [item.strip() for item in re.split(r"[,、\s]+", clean_text) if item.strip()]
+            items = [item.strip() for item in re.split(r"[,、とか\s]+", clean_text) if item.strip()]
             
             if len(items) < 2:
                 return "選択肢がなくて決めれないよ、、、"
@@ -138,6 +175,9 @@ class MyNotificationHandler(HandleNotification):
             elif len(items) > 2:
                 return "最小値と最大値以外はいらないよ、、、"
             
+            if b == 0:
+                return "最大値が0だと数字が出せないよ、、、"
+            
             a = int(items[0])
             b = int(items[1])
             return f"{nosrandom(a, b)} かな？、、、"
@@ -145,118 +185,142 @@ class MyNotificationHandler(HandleNotification):
         # -------------------------------------------------------------
         # マッチした場合の判定・返信処理
         # -------------------------------------------------------------
-        if matched and prompt_text is not None:
-            cmd = prompt_text.strip()
+        should_zap = check_praise_and_zap_trigger(cmd, probability=0.0001)
+        reply_text = ""
+        is_saying_goodnight = False
+        
+        # 後ろに本文がない場合
+        if not cmd:
+            resp = [
+                "よんだ？、、、",
+                "やみ、、、だよ？",
+                "呼ばれた気がする、、、",
+                "にゃん///" if nosrandom(1, 1000) == 1 else "なに、かな？",
+            ]
+            reply_text = random.choice(resp)                
+        else:
+            replies = []
+
+            if any(k in cmd for k in ["サイコロ", "ダイス", "dice"]):
+                replies.append(roll_dice())
+                
+            if "確サイ" in cmd:
+                replies.append(f"サイコロを振ったよ、、、{nosrandom(1,6)}だったよ")
             
-            should_zap = check_praise_and_zap_trigger(cmd, probability=0.0001)
-            # 後ろに本文がない場合
-            if not cmd:
+            if any(k in cmd for k in ["チンチロ", "ちんちろ"]):
+                replies.append(chinchiro())
+            
+            if any(k in cmd for k in ["ランダム", "乱数"]):
+                replies.append(get_nosrandom(cmd))
+            
+            if any(k in cmd for k in ["占い", "おみくじ", "運勢"]):
+                replies.append(tell_fortune())
+            
+            if any(k in cmd.lower() for k in PRAISE_KEYWORDS):
+                replies.append("、、、ありがとう")
+                
+            if any(k in cmd for k in ["選んで", "どっち", "どれ", "ルーレット"]):
+                replies.append(choose_option(cmd))
+                
+            if "おはよう" in cmd:
                 resp = [
-                    "よんだ？、、、",
-                    "やみ、、、だよ？",
-                    "呼ばれた気がする、、、",
-                    "にゃん///" if nosrandom(1, 1000) == 1 else "なに、かな？",
+                    "おはよう",
+                    "今日もいい一日でありますように",
+                    "よく眠れた？",
+                    "今日も、、よろしくね",
+                    "もう起きてたよ。待ってた",
                 ]
-                reply_text = random.choice(resp)                
-            else:
-                replies = []
-
-                if any(k in cmd for k in ["サイコロ", "ダイス", "dice"]):
-                    replies.append(roll_dice())
-                    
-                if "確サイ" in cmd:
-                    replies.append(f"サイコロを振ったよ、、、{nosrandom(1,6)}だったよ")
-                
-                if any(k in cmd for k in ["ランダム", "乱数"]):
-                    replies.append(get_nosrandom(cmd))
-                
-                if any(k in cmd for k in ["占い", "おみくじ", "運勢"]):
-                    replies.append(tell_fortune())
-                
-                if any(k in cmd.lower() for k in PRAISE_KEYWORDS):
-                    replies.append("、、、ありがとう")
-                    
-                if any(k in cmd for k in ["選んで", "どっち", "どれ", "ルーレット"]):
-                    replies.append(choose_option(cmd))
-                    
-                if "おはよう" in cmd:
-                    poll = True
-                    resp = [
-                        "おはよう",
-                        "今日もいい一日でありますように",
-                        "よく眠れた？",
-                        "今日も、、よろしくね",
-                        "もう起きてたよ。待ってた",
-                    ]
-                    replies.append(random.choice(resp))
-                
-                if "こんにちは" in cmd:
-                    resp =[
-                        "こんにちは",
-                        "うん、こんにちは",
-                        "待ってた、、よ？",
-                        "こんにちは、、、今日は何をしていたのかな？"
-                    ]
-                    replies.append(random.choice(resp))
-                
-                if "こんばんは" in cmd:
-                    resp = [
-                        "こんばんは",
-                        "1日お疲れ様",
-                        "こんばんは\nまだ起きているの？" if (0 <= datetime.now.hour <= 4) else "こんばんは\n夜は静かでいいね、、、",
-                    ]
-                    replies.append(random.choice(resp))
-                
-                if "おやすみ" in cmd:
-                    poll = False
-                    resp = [
-                        "おやすみ、、、",
-                        "また明日ね",
-                    ]
-                    replies.append(random.choice(resp))
-                
-                if "疲れた" in cmd:
-                    resp = [
-                        "お疲れ様、、、",
-                        "ゆっくり休んで、、ね、、、",
-                        "無理しないでね",
-                        "お茶、入れてくる",
-                    ]
-                    replies.append(random.choice(resp))
-                
-                if "いい？" in cmd:
-                    resp = [
-                        "いいと思う、、、よ？",
-                        "絶対、、、だめ",
-                    ]
-                    replies.append(random.choice(resp))
-                
-                if "自己紹介" in cmd:
-                    replies.append("やみです、、、\nあまり役に立てないと思うけど\nよろしくお願いします、、、")
-                
-                if "できること" in cmd:
-                    replies.append("[ダイス]と言われたらサイコロを振るし\n[占い]と言われたら占うし\n選択肢をくれたら代わりに決めてあげられるよ")
-                
-                if replies:
-                    reply_text = "\n".join(replies)
-                else:
-                    resp = [
-                        "ごめん難しくてよくわからないや、、、",
-                        "なんかサイコロのランダムは\nNostrの投稿を\nノイズにしてるんだって\nよくわからないや、、、",
-                        "難しいな、、、\n[できること]と聞いてくれたらやみのできることを教えてあげる、、よ？",
-                    ]
-                    
-                    reply_text = random.choice(resp)
-
-            trigger_type = "メンション" if is_mentioned else "キーワード"
-            print(f"[{trigger_type}] 抽出された命令: '{cmd}' (区切り: '{delimiter}')")
-
-            if poll:
-                builder = EventBuilder.text_note_reply(reply_text, event)
-                await self.client.send_event_builder(builder)
+                replies.append(random.choice(resp))
             
-            if should_zap:
-                asyncio.create_task(send_zap_via_nwc(event, sats=21))
+            if "こんにちは" in cmd:
+                resp =[
+                    "こんにちは",
+                    "うん、こんにちは",
+                    "待ってた、、よ？",
+                    "こんにちは、、、今日は何をしていたのかな？"
+                ]
+                replies.append(random.choice(resp))
+            
+            if "こんばんは" in cmd:
+                resp = [
+                    "こんばんは",
+                    "1日お疲れ様",
+                    "こんばんは\nまだ起きているの？" if (0 <= datetime.now.hour <= 4) else "こんばんは\n夜は静かでいいね、、、",
+                ]
+                replies.append(random.choice(resp))
+            
+            if "おやすみ" in cmd:
+                resp = [
+                    "おやすみ、、、",
+                    "また明日ね",
+                ]
+                replies.append(random.choice(resp))
+                if self.target_hex_pubkey and author_hex == self.target_hex_pubkey:
+                    is_saying_goodnight = True
+            
+            if "疲れた" in cmd:
+                resp = [
+                    "お疲れ様、、、",
+                    "ゆっくり休んで、、ね、、、",
+                    "無理しないでね",
+                    "お茶、入れてくる",
+                ]
+                replies.append(random.choice(resp))
+            
+            if any(k in cmd for k in ["きょもなん", "今日もなんとか"]):
+                resp = [
+                    "今日もなんとかがんばろうね",
+                    "今日もなんとか、、、",
+                    "今日もなんとか、、、乗り切ろう",
+                    "今日もなんとか生き残ろうね",
+                ]
+                replies.append(random.choice(resp))
+            
+            if any(k in cmd for k in ["ごごなん", "午後なん", "午後もなんとか"]):
+                resp = [
+                    "午後もなんとかがんばろうね",
+                    "午後もなんとか、、、",
+                    "午後もなんとか乗り切ろう",
+                    "午後もなんとか生き残ろうね",
+                ]
+                replies.append(random.choice(resp))
+            
+            if "しても" in cmd or "でも" in cmd and "いい？" in cmd:
+                resp = [
+                    "いいと思う、、、よ？",
+                    "絶対、、、だめ",
+                ]
+                replies.append(random.choice(resp))
+            
+            if "自己紹介" in cmd:
+                replies.append("やみです、、、\nあまり役に立てないと思うけど\nよろしくお願いします、、、")
+            
+            if "できること" in cmd:
+                replies.append("[ダイス]と言われたらサイコロを振るし\n[占い]と言われたら占うし\n選択肢をくれたら代わりに決めてあげられるよ")
+            
+            if replies:
+                reply_text = "\n".join(replies)
+            else:
+                resp = [
+                    "ごめん難しくてよくわからないや、、、",
+                    "なんかサイコロのランダムは\nNostrの投稿を\nノイズにしてるんだって\nよくわからないや、、、",
+                    "難しいな、、、\n[できること]と聞いてくれたらやみのできることを教えてあげる、、よ？",
+                ]
+                
+                reply_text = random.choice(resp)
+
+        trigger_type = "メンション" if is_mentioned else "キーワード"
+        print(f"[{trigger_type}] 抽出された命令: '{cmd}' (区切り: '{delimiter}')")
+
+        builder = EventBuilder.text_note_reply(reply_text, event)
+        await self.client.send_event_builder(builder)
+        
+        if should_zap:
+            asyncio.create_task(send_zap_via_nwc(event, sats=21))
+            
+        if is_saying_goodnight:
+            self.is_bot_active = False
+            print("やみを停止しました")
 
     async def handle_msg(self, relay_url, msg):
         # 生メッセージの処理が必要ない場合はパスでOK
