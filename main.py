@@ -305,6 +305,7 @@ class MyNotificationHandler(HandleNotification):
                     "ごめん難しくてよくわからないや、、、",
                     "なんかサイコロのランダムは\nNostrの投稿を\nノイズにしてるんだって\nよくわからないや、、、",
                     "難しいな、、、\n[できること]と聞いてくれたらやみのできることを教えてあげる、、よ？",
+                    "夜に散歩するのが好きだよ、、、ごめんどうでもいいね"
                 ]
                 
                 reply_text = random.choice(resp)
