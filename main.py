@@ -15,7 +15,7 @@ TARGET_KEYWORD = "やみ"
 TARGET_NPUB = os.getenv("NOSTR_TARGET_NPUB")
 
 # 1. 「やみ」キーワード用パターン
-COMMAND_PATTERN = re.compile(rf"{re.escape(TARGET_KEYWORD)}([,、\s ]?)(.*)", re.IGNORECASE | re.DOTALL)
+COMMAND_PATTERN = re.compile(rf"{re.escape(TARGET_KEYWORD)}([,、\s])(.*)", re.IGNORECASE | re.DOTALL)
 
 # 2. メンション用パターン（先頭にある nostr:npub1... や @メンション名 + 区切り文字 + 本文）
 MENTION_PATTERN = re.compile(r"^(?:nostr:npub1[a-z0-9]+|@\w+|@[^\s,、]+)([,、\s ]?)(.*)", re.IGNORECASE | re.DOTALL)
@@ -127,18 +127,23 @@ class MyNotificationHandler(HandleNotification):
             return random.choice(resp)
         
         def chinchiro() -> str:
-            a = nosrandom(1, 6)
-            b = nosrandom(1, 6)
-            c = nosrandom(1, 6)
+            dice = sorted([nosrandom(1,6), nosrandom(1,6), nosrandom(1,6)])
+            a, b, c = dice
             
-            if a == 1 and b == 1 and c == 1:
+            if dice == [1, 1, 1]:
                 return f"出目は 『{a}』『{b}』『{c}』\nピンゾロだったよ！"
-            elif a == b and b == c:
+            elif a == b == c:
                 return f"出目は『{a}』『{b}』『{c}』\nゾロ目だよ"
-            elif a == 4 and b == 5 and c == 6:
+            elif dice == [4, 5, 6]:
                 return f"出目は『{a}』『{b}』『{c}』\nシゴロだよ、、、"
+            elif dice == [1, 2, 3]:
+                return f"出目は『{a}』『{b}』『{c}』\nヒフミだったよ"
+            elif a == b:
+                return f"出目は『{a}』『{b}』『{c}』\n『{c}』の目、、、"
+            elif b == c:
+                return f"出目は『{a}』『{b}』『{c}』\n『{a}』の目、、、"
             else:
-                return f"出目は『{a}』『{b}』『{c}』だったよ"
+                return f"出目は『{a}』『{b}』『{c}』だったよ\n役無し、、、だね"
         
         def tell_fortune() -> str:
             results = [
@@ -157,7 +162,7 @@ class MyNotificationHandler(HandleNotification):
             return f"🔮今日の運勢: 【{omikuji} 】\n{comment}\nラッキーアイテム: {item}"
 
         def choose_option(text: str) -> str:
-            clean_text = re.sub(r"(選んで|どれ|どっち|ルーレット|決めて|choice)", "", text, flags=re.IGNORECASE).strip()
+            clean_text = re.sub(r"(選んで|どれ|どっち|ルーレット|決めて|choice|?)", "", text, flags=re.IGNORECASE).strip()
             items = [item.strip() for item in re.split(r"[,、とか\s]+", clean_text) if item.strip()]
             
             if len(items) < 2:
@@ -171,16 +176,25 @@ class MyNotificationHandler(HandleNotification):
             items = [item.strip() for item in re.split(r"[,、\s]+", clean_text) if item.strip()]
             
             if len(items) < 2:
-                return "最小値と最大値を決めてね、、、"
+                return "最小値と最大値を決めてくれたら\nやみがそこから選んであげるよ？、、、"
             elif len(items) > 2:
                 return "最小値と最大値以外はいらないよ、、、"
             
-            if int(items[1]) == 0:
-                return "最大値が0だと数字が出せないよ、、、"
-            
             a = int(items[0])
             b = int(items[1])
-            return f"{nosrandom(a, b)} かな？、、、"
+            
+            if a > b:
+                return "最小値が最大値よりも大きいんだけど、、、\nやみのいない間に世界が変わったのかな？、、、"
+            elif b == 0:
+                return f"最大値が0になってるよ！？\n{a}から無限の中から決めたらいいのかな？、、、\nやみには決めれないかも、、、"
+            
+            resp = [
+                f"{nosrandom(a, b)} かな？、、、",
+                f"{nosrandom(a, b)}を選んでみたよ、、、",
+                f"{nosrandom(a, b)}の気分、、、",
+            ]
+            
+            return random.choice(resp)
 
         # -------------------------------------------------------------
         # マッチした場合の判定・返信処理

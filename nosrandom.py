@@ -1,5 +1,6 @@
 import json
 import hashlib
+import time
 from websocket import create_connection
 
 DEFAULT_RELAY = "wss://yabu.me"
@@ -41,6 +42,7 @@ def get_nostr_entropy(relay_url=DEFAULT_RELAY, count=10):
     ws.close()
     
     entropy_string = "".join([f"{d['length']}-{d['created_at']}-{d['id']}" for d in contents_data])
+    entropy_string += str(time.time_ns())
     return hashlib.sha256(entropy_string.encode('utf-8')).digest()
 
 def nosrandom(min_val=1, max_val=6, relay_url=DEFAULT_RELAY):
